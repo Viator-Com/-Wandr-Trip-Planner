@@ -34,12 +34,23 @@ export abstract class MCPSessionFunction<T = any> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Constants                                                           */
+/* ------------------------------------------------------------------ */
+
+const SESSION_TTL_MS = 10 * 60 * 1000; // evict after 10 min idle
+const MCP_TIMEOUT_MS = 120_000; // 120s — covers RapidAPI cold starts
+const RETRY_DELAY_MS = 2_000; // wait before retry after timeout
+const MAX_RETRIES = 2;
+
+/* ------------------------------------------------------------------ */
 /* Persistent client cache                                             */
 /* ------------------------------------------------------------------ */
 
 interface CachedSession {
   client: MCPClient;
   config: MCPServerConfig;
+  createdAt: number;
+  lastUsedAt: number;
 }
 
 const sessionCache = new Map<string, CachedSession>();
@@ -47,9 +58,7 @@ const sessionCache = new Map<string, CachedSession>();
 function cleanEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
-    if (typeof v === "string") {
-      out[k] = v;
-    }
+    if (typeof v === "string") out[k] = v;
   }
   return out;
 }
@@ -64,37 +73,94 @@ async function createTransport(serverConfig: MCPServerConfig) {
         ...(serverConfig.env ?? {}),
       },
     });
-  } else {
-    return new StreamableHTTPClientTransport(
-      new URL(serverConfig.url),
-      serverConfig.headers
-        ? { requestInit: { headers: serverConfig.headers } }
-        : undefined,
-    );
+  }
+  return new StreamableHTTPClientTransport(
+    new URL(serverConfig.url),
+    serverConfig.headers
+      ? { requestInit: { headers: serverConfig.headers } }
+      : undefined,
+  );
+}
+
+async function createSession(
+  serverName: string,
+  serverConfig: MCPServerConfig,
+): Promise<CachedSession> {
+  console.error(`mcpWrapper: creating new session for "${serverName}"`);
+
+  const transport = await createTransport(serverConfig);
+
+  // Pass timeout so MCP SDK doesn't kill slow remote servers at the default 60s
+  const client = new Client(
+    { name: "langgraph-mcp-client", version: "1.0.0" },
+    { timeout: MCP_TIMEOUT_MS } as any, // sdk typings vary by version
+  );
+
+  await client.connect(transport);
+  console.error(`mcpWrapper: session established for "${serverName}"`);
+
+  return {
+    client,
+    config: serverConfig,
+    createdAt: Date.now(),
+    lastUsedAt: Date.now(),
+  };
+}
+
+/**
+ * Lightweight ping — if the transport is dead this throws.
+ */
+async function isSessionAlive(session: CachedSession): Promise<boolean> {
+  try {
+    await session.client.listTools();
+    return true;
+  } catch {
+    return false;
   }
 }
 
 async function getOrCreateSession(
   serverName: string,
   serverConfig: MCPServerConfig,
-): Promise<MCPClient> {
+): Promise<CachedSession> {
   const cached = sessionCache.get(serverName);
+
   if (cached) {
-    return cached.client;
+    const idleMs = Date.now() - cached.lastUsedAt;
+
+    // Evict if idle too long
+    if (idleMs > SESSION_TTL_MS) {
+      console.error(
+        `mcpWrapper: session for "${serverName}" idle ${Math.round(idleMs / 1000)}s — evicting`,
+      );
+      await closeSession(serverName);
+    } else {
+      // Health-check before reuse
+      const alive = await isSessionAlive(cached);
+      if (alive) {
+        cached.lastUsedAt = Date.now();
+        console.error(`mcpWrapper: reusing cached session for "${serverName}"`);
+        return cached;
+      }
+      console.error(
+        `mcpWrapper: session for "${serverName}" failed health check — recreating`,
+      );
+      await closeSession(serverName);
+    }
   }
 
-  const transport = await createTransport(serverConfig);
-  const client = new Client({ name: "langgraph-mcp-client", version: "1.0.0" });
-  await client.connect(transport);
-
-  sessionCache.set(serverName, { client, config: serverConfig });
-  return client;
+  const session = await createSession(serverName, serverConfig);
+  sessionCache.set(serverName, session);
+  return session;
 }
 
 /**
  * Call this at the end of a workflow/session to cleanly close all connections.
  */
 export async function closeAllSessions(): Promise<void> {
+  console.error(
+    `mcpWrapper: closeAllSessions — evicting ${sessionCache.size} session(s)`,
+  );
   const entries = [...sessionCache.entries()];
   sessionCache.clear();
   await Promise.allSettled(entries.map(([, { client }]) => client.close()));
@@ -110,6 +176,20 @@ export async function closeSession(serverName: string): Promise<void> {
     await cached.client.close().catch(() => {});
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Background TTL eviction — cleans up idle sessions every 60 s       */
+/* ------------------------------------------------------------------ */
+
+setInterval(async () => {
+  const now = Date.now();
+  for (const [name, session] of sessionCache.entries()) {
+    if (now - session.lastUsedAt > SESSION_TTL_MS) {
+      console.error(`mcpWrapper: TTL evicting idle session for "${name}"`);
+      await closeSession(name);
+    }
+  }
+}, 60_000).unref(); // .unref() so this timer won't prevent clean process exit
 
 /* ------------------------------------------------------------------ */
 /* Routing description                                                  */
@@ -260,7 +340,7 @@ export class RunTool extends MCPSessionFunction<string> {
 }
 
 /* ------------------------------------------------------------------ */
-/* MCP session lifecycle — now uses persistent cache                   */
+/* apply() — single entry point with retry on timeout                 */
 /* ------------------------------------------------------------------ */
 
 export async function apply<T>(
@@ -268,14 +348,40 @@ export async function apply<T>(
   serverConfig: MCPServerConfig,
   fn: MCPSessionFunction<T>,
 ): Promise<T> {
-  const session = await getOrCreateSession(serverName, serverConfig);
+  let lastError: unknown;
 
-  try {
-    return await fn.call(serverName, session);
-  } catch (err) {
-    // On error, evict the cached session so the next call gets a fresh connection
-    await closeSession(serverName);
-    throw err;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const session = await getOrCreateSession(serverName, serverConfig);
+
+    try {
+      session.lastUsedAt = Date.now();
+      const result = await fn.call(serverName, session.client);
+      session.lastUsedAt = Date.now();
+      return result;
+    } catch (err: any) {
+      lastError = err;
+      const isTimeout = err?.code === -32001;
+
+      console.error(
+        `mcpWrapper: attempt ${attempt}/${MAX_RETRIES} failed for "${serverName}":`,
+        err?.message ?? err,
+      );
+
+      // Always evict the broken session before deciding whether to retry
+      await closeSession(serverName);
+
+      if (isTimeout && attempt < MAX_RETRIES) {
+        console.error(
+          `mcpWrapper: timeout on "${serverName}" — waiting ${RETRY_DELAY_MS}ms then retrying with fresh session`,
+        );
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue; // next loop iteration calls getOrCreateSession → fresh session
+      }
+
+      // Non-timeout error or final attempt — propagate immediately
+      throw err;
+    }
   }
-  // Note: no session.close() here — connection stays alive for reuse
+
+  throw lastError;
 }

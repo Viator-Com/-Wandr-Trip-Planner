@@ -93,13 +93,13 @@ export class Configuration {
 
   routingQuerySystemPrompt: string = prompts.ROUTING_QUERY_SYSTEM_PROMPT;
 
-  routingQueryModel: string = "gpt-5-mini";
+  routingQueryModel: string = "gpt-4o-mini";
 
   /* ---------------- Routing (Response Selection) ---------------- */
 
   routingResponseSystemPrompt: string = prompts.ROUTING_RESPONSE_SYSTEM_PROMPT;
 
-  routingResponseModel: string = "gpt-5-mini";
+  routingResponseModel: string = "gpt-4o-mini";
 
   /* ---------------- MCP Orchestration ---------------- */
 
@@ -115,13 +115,13 @@ export class Configuration {
 
   /* ---------------- Tool Refinement ---------------- */
 
-  toolRefinerModel: string = "gpt-5-mini";
+  toolRefinerModel: string = "gpt-4o-mini";
 
   toolRefinerPrompt: string = prompts.TOOL_REFINER_PROMPT;
 
   /* ---------------- Conversation Summarization ---------------- */
 
-  summarizeConversationModel: string = "gpt-5-mini";
+  summarizeConversationModel: string = "gpt-4o-mini";
 
   summarizeConversationSystemPrompt: string =
     prompts.SUMMARIZE_CONVERSATION_PROMPT;

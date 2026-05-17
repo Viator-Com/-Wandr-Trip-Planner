@@ -602,13 +602,13 @@ function routeAfterHandleMcpServers(state: State): string {
   return "responseComposer";
 }
 
-function routeAfterRefineToolCall(state: State): string {
-  const last = state.messages.at(-1);
-  if (last instanceof AIMessage && last.tool_calls?.length) {
-    return "mcpToolCall";
-  }
-  return "handleMcpServers";
-}
+// function routeAfterRefineToolCall(state: State): string {
+//   const last = state.messages.at(-1);
+//   if (last instanceof AIMessage && last.tool_calls?.length) {
+//     return "mcpToolCall";
+//   }
+//   return "handleMcpServers";
+// }
 
 /* ------------------ Graph ------------------ */
 
@@ -641,10 +641,7 @@ builder
     handleMcpServers: "handleMcpServers",
   })
 
-  .addConditionalEdges("refineToolCall", routeAfterRefineToolCall, {
-    mcpToolCall: "mcpToolCall",
-    handleMcpServers: "handleMcpServers",
-  })
+  .addEdge("refineToolCall", "mcpToolCall")
 
   .addEdge("mcpToolCall", "mcpOrchestrator")
 

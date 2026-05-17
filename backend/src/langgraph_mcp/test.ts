@@ -8,7 +8,7 @@ async function main() {
     {
       messages: [
         new HumanMessage(
-          `find flights from jaipur to mumbai for economy class for 20 may 2026`,
+          `a one-way flight from Udaipur to Jaipur on 20 May 2026,cabin class,one passenger`,
         ),
       ],
     },
