@@ -1,0 +1,1062 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Cormorant+Garamond:wght@300;400;500;600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap");
+
+/* ── Design tokens ───────────────────────────────────────────── */
+
+:root {
+  --bg: #0c0b0a;
+  --surface: #141210;
+  --surface-2: #1c1916;
+  --border: #252220;
+  --border-soft: #1e1c19;
+  --gold: #c9a84c;
+  --gold-dim: #8a6a28;
+  --gold-glow: rgba(201, 168, 76, 0.12);
+  --text: #ede5d8;
+  --text-sub: #a89880;
+  --text-muted: #5a5048;
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+
+  /* ProfilePage aliases (mapped to shared tokens) */
+  --wp-bg: var(--bg);
+  --wp-card: var(--surface-2);
+  --wp-border: var(--border);
+  --wp-gold: var(--gold);
+  --wp-gold-dim: var(--gold-dim);
+  --wp-gold-glow: var(--gold-glow);
+  --wp-text: var(--text);
+  --wp-muted: var(--text-muted);
+  --wp-danger: #c0503a;
+  --wp-success: #4a9e6a;
+  --wp-input-bg: #0e0c0a;
+}
+
+/* ── Reset ───────────────────────────────────────────────────── */
+
+.wp-layout *,
+.wp-layout *::before,
+.wp-layout *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Root layout ─────────────────────────────────────────────── */
+
+.wp-layout {
+  display: flex;
+  min-height: 100vh;
+  font-family: "DM Sans", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR  (tp- prefix)
+═══════════════════════════════════════════════════════════════ */
+
+.tp-sidebar {
+  width: 260px;
+  min-width: 260px;
+  height: 100%;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition:
+    width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease;
+}
+
+.tp-sidebar.tp-closed {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Sidebar header ──────────────────────────────────────────── */
+
+.tp-sidebar-header {
+  flex-shrink: 0;
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tp-logo {
+  font-family: "DM Serif Display", serif;
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ── New Trip button ─────────────────────────────────────────── */
+
+.tp-new-trip-btn {
+  flex-shrink: 0;
+  margin: 14px 12px 10px;
+  background: var(--gold-glow);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: center;
+  letter-spacing: 0.02em;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.tp-new-trip-btn:hover {
+  background: rgba(201, 168, 76, 0.2);
+  box-shadow: 0 2px 12px rgba(201, 168, 76, 0.1);
+}
+
+/* ── Trips label ─────────────────────────────────────────────── */
+
+.tp-trips-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 6px 18px;
+  white-space: nowrap;
+}
+
+/* ── Trip list ───────────────────────────────────────────────── */
+
+.tp-trips-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 0 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.tp-trips-list::-webkit-scrollbar {
+  width: 3px;
+}
+.tp-trips-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tp-trips-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* ── Trip group ──────────────────────────────────────────────── */
+
+.tp-trip-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Trip row ────────────────────────────────────────────────── */
+
+.tp-trip-item {
+  padding: 9px 18px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.tp-trip-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tp-trip-item.tp-active {
+  background: var(--gold-glow);
+  border-left-color: var(--gold-dim);
+}
+
+.tp-trip-row-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tp-trip-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tp-trip-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tp-trip-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Chevron ─────────────────────────────────────────────────── */
+
+.tp-chevron {
+  font-size: 16px;
+  color: var(--text-muted);
+  line-height: 1;
+  flex-shrink: 0;
+  display: inline-block;
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.15s;
+}
+
+.tp-chevron--open {
+  transform: rotate(90deg);
+  color: var(--gold-dim);
+}
+
+/* ── Sub-nav ─────────────────────────────────────────────────── */
+
+.tp-subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 12px 6px 28px;
+  animation: tp-subnav-in 0.18s ease both;
+}
+
+@keyframes tp-subnav-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tp-subnav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-sub);
+  font-family: "DM Sans", sans-serif;
+  font-size: 12.5px;
+  font-weight: 400;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+  white-space: nowrap;
+}
+
+.tp-subnav-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.tp-subnav-btn--active {
+  background: var(--gold-glow);
+  border-color: rgba(201, 168, 76, 0.2);
+  color: var(--gold);
+}
+
+.tp-subnav-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* ── Profile footer ──────────────────────────────────────────── */
+
+.tp-profile-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  margin: 8px 10px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.tp-profile-footer:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border-soft);
+}
+
+.tp-profile-footer--active {
+  background: var(--gold-glow);
+  border-color: var(--gold-dim);
+}
+
+.tp-profile-avatar {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "DM Serif Display", serif;
+  font-size: 14px;
+  color: #0c0b0a;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.tp-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tp-profile-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tp-profile-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tp-profile-email {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.tp-profile-arrow {
+  font-size: 16px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition:
+    color 0.15s,
+    transform 0.15s;
+}
+
+.tp-profile-footer:hover .tp-profile-arrow,
+.tp-profile-footer--active .tp-profile-arrow {
+  color: var(--gold-dim);
+  transform: translateX(2px);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PROFILE MAIN  (wp- prefix)
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Topbar ──────────────────────────────────────────────────── */
+
+/* ── Root layout ─────────────────────────────────────────────── */
+.wp-layout {
+  display: flex;
+  height: 100vh; /* was min-height — sidebar won't stretch with min-height */
+  font-family: "DM Sans", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden; /* prevents double scrollbars */
+}
+
+/* ── Sidebar full-height fix ─────────────────────────────────── */
+.wp-layout .tp-sidebar {
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+
+/* ── Main scrolls independently ──────────────────────────────── */
+.wp-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto; /* only the main content scrolls */
+  background: var(--bg);
+  height: 100vh;
+}
+
+.wp-topbar {
+  padding: 20px 36px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wp-topbar-star {
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.wp-topbar-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+/* ── Main content area ───────────────────────────────────────── */
+
+.wp-content {
+  padding: 36px;
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Profile header card ─────────────────────────────────────── */
+
+.wp-header-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.wp-header-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0.6;
+}
+
+.wp-avatar-lg {
+  width: 68px;
+  height: 68px;
+  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Cormorant Garamond", serif;
+  font-size: 28px;
+  font-weight: 500;
+  color: #0c0b0a;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.2);
+}
+
+.wp-header-name {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.wp-header-email {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.wp-header-badge {
+  font-size: 11px;
+  background: var(--gold-glow);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-top: 8px;
+  display: inline-block;
+  letter-spacing: 0.05em;
+}
+
+/* ── Section cards ───────────────────────────────────────────── */
+
+.wp-section-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.wp-section-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wp-section-icon {
+  width: 30px;
+  height: 30px;
+  background: var(--gold-glow);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.wp-section-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.03em;
+}
+
+.wp-section-body {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Form fields ─────────────────────────────────────────────── */
+
+.wp-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wp-field-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.wp-field-input {
+  background: #0e0c0a;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 14px;
+  color: var(--text);
+  font-family: "DM Sans", sans-serif;
+  font-size: 14px;
+  outline: none;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+  width: 100%;
+}
+
+.wp-field-input:focus {
+  border-color: var(--gold-dim);
+  box-shadow: 0 0 0 3px rgba(138, 106, 40, 0.08);
+}
+
+.wp-field-input::placeholder {
+  color: var(--text-muted);
+}
+
+.wp-field-input[readonly] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.wp-field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wp-field-error {
+  font-size: 11px;
+  color: var(--wp-danger);
+}
+
+.wp-input-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.wp-input-wrapper {
+  position: relative;
+}
+
+.wp-input-wrapper .wp-field-input {
+  padding-right: 40px;
+}
+
+.wp-toggle-eye {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.wp-toggle-eye:hover {
+  color: var(--gold);
+}
+
+/* ── Password strength bar ───────────────────────────────────── */
+
+.wp-strength-bar {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.wp-strength-seg {
+  height: 3px;
+  border-radius: 2px;
+  flex: 1;
+  background: var(--border);
+  transition: background 0.3s;
+}
+
+.wp-strength-seg.weak {
+  background: var(--wp-danger);
+}
+.wp-strength-seg.medium {
+  background: var(--gold-dim);
+}
+.wp-strength-seg.strong {
+  background: var(--wp-success);
+}
+
+.wp-strength-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+
+.wp-btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.wp-btn {
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  letter-spacing: 0.02em;
+}
+
+.wp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wp-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.wp-btn-ghost:hover:not(:disabled) {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.wp-btn-gold {
+  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+  color: #0c0b0a;
+  font-weight: 600;
+}
+
+.wp-btn-gold:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(201, 168, 76, 0.2);
+}
+
+.wp-btn-gold:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* ── Danger zone ─────────────────────────────────────────────── */
+
+.wp-danger-zone {
+  background: var(--surface-2);
+  border: 1px solid rgba(192, 80, 58, 0.3);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.wp-danger-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(192, 80, 58, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wp-danger-icon {
+  width: 30px;
+  height: 30px;
+  background: rgba(192, 80, 58, 0.1);
+  border: 1px solid rgba(192, 80, 58, 0.3);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.wp-danger-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 17px;
+  font-weight: 500;
+  color: #e07060;
+  letter-spacing: 0.03em;
+}
+
+.wp-danger-body {
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wp-danger-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.wp-btn-danger {
+  background: transparent;
+  border: 1px solid rgba(192, 80, 58, 0.5);
+  color: var(--wp-danger);
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.wp-btn-danger:hover:not(:disabled) {
+  background: rgba(192, 80, 58, 0.1);
+  border-color: var(--wp-danger);
+}
+
+/* ── Modal ───────────────────────────────────────────────────── */
+
+.wp-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: wp-fadeIn 0.15s ease;
+}
+
+@keyframes wp-fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.wp-modal {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  position: relative;
+  animation: wp-slideUp 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes wp-slideUp {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.wp-modal::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(192, 80, 58, 0.6),
+    transparent
+  );
+  border-radius: 16px 16px 0 0;
+}
+
+.wp-modal-icon {
+  width: 44px;
+  height: 44px;
+  background: rgba(192, 80, 58, 0.1);
+  border: 1px solid rgba(192, 80, 58, 0.3);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+.wp-modal-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.wp-modal-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.wp-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* ── Toast ───────────────────────────────────────────────────── */
+
+.wp-toast {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(120%);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 100;
+}
+
+.wp-toast.show {
+  transform: translateX(0);
+}
+
+.wp-toast-icon {
+  font-size: 15px;
+}
+
+/* ── Skeleton loader ─────────────────────────────────────────── */
+
+.wp-skeleton {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--border) 25%,
+    var(--surface-2) 50%,
+    var(--border) 75%
+  );
+  background-size: 200% 100%;
+  animation: wp-shimmer 1.4s infinite;
+}
+
+@keyframes wp-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+
+.wp-main::-webkit-scrollbar {
+  width: 5px;
+}
+.wp-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+.wp-main::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+/* ── Trip row actions (delete + chevron) ─────────────────────── */
+.tp-trip-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Delete button ───────────────────────────────────────────── */
+.tp-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px 5px;
+  font-size: 12px;
+  border-radius: 5px;
+  opacity: 0;
+  color: var(--text-muted);
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tp-trip-item:hover .tp-delete-btn {
+  opacity: 1;
+}
+
+.tp-delete-btn:hover {
+  background: rgba(192, 80, 58, 0.15);
+  color: #e07060;
+}
+
+.tp-trip-item:has(.tp-delete-confirm) .tp-delete-btn {
+  opacity: 1;
+}
+
+/* ── Inline confirm bar ──────────────────────────────────────── */
+.tp-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px 9px 12px;
+  background: rgba(192, 80, 58, 0.07);
+  border-top: 1px solid rgba(192, 80, 58, 0.18);
+  animation: tp-confirm-slide 0.15s ease;
+}
+
+@keyframes tp-confirm-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tp-delete-confirm-text {
+  flex: 1;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #e07060;
+  letter-spacing: 0.01em;
+}
+
+.tp-delete-confirm-btn {
+  border: none;
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: "DM Sans", sans-serif;
+  transition: background 0.15s ease;
+}
+
+.tp-delete-confirm-btn--yes {
+  background: rgba(192, 80, 58, 0.8);
+  color: var(--text);
+}
+
+.tp-delete-confirm-btn--yes:hover {
+  background: #c0503a;
+}
+
+.tp-delete-confirm-btn--no {
+  background: rgba(232, 228, 220, 0.06);
+  color: var(--text-muted);
+}
+
+.tp-delete-confirm-btn--no:hover {
+  background: rgba(232, 228, 220, 0.1);
+  color: var(--text);
+}
