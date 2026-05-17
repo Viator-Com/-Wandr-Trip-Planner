@@ -79,15 +79,6 @@ function toolName(t: any): string | undefined {
   return t?.function?.name ?? t?.name;
 }
 
-function toolCallKey(name: string, args: unknown): string {
-  try {
-    const sortedArgs = JSON.stringify(args, Object.keys(args as object).sort());
-    return `${name}:${sortedArgs}`;
-  } catch {
-    return `${name}:${String(args)}`;
-  }
-}
-
 async function getTools(
   serverName: string,
   serverConfig: any,
@@ -106,93 +97,6 @@ async function getTools(
 
 function clearToolsCache(): void {
   toolsCache.clear();
-}
-
-/* ------------------ Context helpers ------------------ */
-
-/**
- * Extracts all ToolMessages from the conversation and returns a compact JSON
- * summary. The orchestrator and refiner both use this to chain tool outputs —
- * e.g. picking up a skyId from searchAirport before calling searchFlights.
- */
-// ── Context helpers ──────────────────────────────────────────────────────────
-
-async function buildToolResultSummary(
-  messages: BaseMessage[],
-  config: RunnableConfig,
-): Promise<string> {
-  const results: Array<{ tool: string; output: unknown }> = [];
-
-  for (const msg of messages) {
-    if (msg._getType() === "tool") {
-      const toolMsg = msg as ToolMessage;
-      let parsed: unknown = toolMsg.content;
-      if (typeof toolMsg.content === "string") {
-        try {
-          parsed = JSON.parse(toolMsg.content);
-        } catch {
-          parsed = toolMsg.content;
-        }
-      }
-      results.push({ tool: toolMsg.name ?? "unknown", output: parsed });
-    }
-  }
-
-  if (!results.length) return "No tool calls have been made yet.";
-
-  const MAX_CHARS = 40_000;
-  const raw = JSON.stringify(results, null, 2);
-  const truncated =
-    raw.length > MAX_CHARS
-      ? raw.slice(0, MAX_CHARS) + "\n\n[...truncated...]"
-      : raw;
-
-  const configuration = Configuration.fromRunnableConfig(config);
-  const model = loadChatModel(configuration.summarizeConversationModel);
-
-  const response = await model.invoke(
-    [
-      new HumanMessage(
-        `Summarize the following tool call results concisely. ` +
-          `Group by tool name. Use short bullet points.\n\n` +
-          `CRITICAL RULES:\n` +
-          `- Preserve ALL field names and values EXACTLY as they appear (e.g. originSkyId, destinationSkyId, entityId). Do NOT rename, rephrase, or relabel any field.\n` +
-          `- Copy identifiers, IDs, codes, and keys character-for-character. Never paraphrase them.\n` +
-          `- Highlight errors and important values, but quote them verbatim from the source.\n` +
-          `- Omit only deeply nested raw data dumps that add no meaning.\n\n` +
-          `${truncated}`,
-      ),
-    ],
-    config,
-  );
-
-  if (typeof response.content === "string") return response.content;
-
-  return response.content
-    .filter((b): b is { type: "text"; text: string } => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
-}
-
-/**
- * Builds a compact list of already-executed tool calls (name + args only).
- * Passed to the orchestrator so it knows what NOT to repeat.
- */
-function buildCallHistory(messages: BaseMessage[]): string {
-  const calls: Array<{ tool: string; args: unknown }> = [];
-
-  for (const msg of messages) {
-    if (msg._getType() === "ai") {
-      const aiMsg = msg as AIMessage;
-      for (const tc of aiMsg.tool_calls ?? []) {
-        calls.push({ tool: tc.name, args: tc.args });
-      }
-    }
-  }
-
-  return calls.length
-    ? JSON.stringify(calls, null, 2)
-    : "No tools have been called yet.";
 }
 
 /* ------------------ Nodes ------------------ */
