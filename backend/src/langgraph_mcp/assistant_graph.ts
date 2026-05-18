@@ -71,6 +71,30 @@ export type Conversation = {
   messages: [ChatMessage, ChatMessage];
 };
 
+const SERVER_TOOL_ALLOWLIST: Record<string, string[]> = {
+  flights: [
+    "searchAirport",
+    "searchFlights_Version_2",
+    "searchFlightsMultiStops",
+    "getFlightDetails",
+    "getPriceCalendar",
+    "getNearByAirports",
+    "searchFlightEverywhere",
+    "searchIncomplete",
+  ],
+  tavily: ["tavily_search", "tavily_extract"],
+  places: [
+    "search_destinations",
+    "search_nearby",
+    "get_place_details",
+    "geocode_address",
+    "reverse_geocode",
+    "autocomplete_address",
+    "get_route",
+  ],
+  db: ["fetch-trip-from-database"],
+};
+
 /* ------------------ Tools cache ------------------ */
 
 const toolsCache = new Map<string, Array<Record<string, any>>>();
@@ -97,6 +121,20 @@ async function getTools(
 
 function clearToolsCache(): void {
   toolsCache.clear();
+}
+
+export function filterToolsForServer(
+  serverName: string,
+  allTools: Array<Record<string, any>>,
+): Array<Record<string, any>> {
+  const allowlist = SERVER_TOOL_ALLOWLIST[serverName];
+
+  if (!allowlist) return allTools;
+
+  const filtered = allTools.filter((tool) =>
+    allowlist.includes(tool.function?.name ?? tool.name),
+  );
+  return filtered;
 }
 
 /* ------------------ Nodes ------------------ */
@@ -168,10 +206,7 @@ export async function route(
   ]);
 
   const lastMsg = state.messages[state.messages.length - 1];
-  const input =
-    typeof lastMsg.content === "string"
-      ? lastMsg.content
-      : JSON.stringify(lastMsg.content);
+  const input = state.queries.at(-1);
 
   const msg = await prompt.invoke({
     input,
@@ -266,7 +301,8 @@ export async function mcpOrchestrator(
 
   let tools: Array<Record<string, any>>;
   try {
-    tools = await getTools(serverName, serverConfig);
+    const allTools = await getTools(serverName, serverConfig);
+    tools = filterToolsForServer(serverName, allTools);
   } catch (err) {
     console.error(`mcpOrchestrator: getTools failed for "${serverName}":`, err);
     return { current_mcp_server: "" };
@@ -297,16 +333,6 @@ export async function mcpOrchestrator(
 
   const prompt = ChatPromptTemplate.fromMessages([
     ["system", configuration.mcpOrchestratorSystemPrompt],
-    // Inject chaining context BEFORE conversation history so the model sees
-    // what has already been called and what outputs are available to build on.
-    [
-      "system",
-      `
-    ## Already-called tools — do NOT repeat these exact calls   and   Tool outputs available for parameter chaining
-       Extract IDs, codes, entity values, prices, tokens, and any other data you need
-      for your NEXT tool call exclusively from the block below.
-       {messages}`,
-    ],
   ]);
 
   const model = loadChatModel(configuration.mcpOrchestratorModel);
@@ -379,24 +405,12 @@ export async function refineToolCall(
 
   const configuration = Configuration.fromRunnableConfig(config);
   const toolInfo = (state.current_tool as any)?.function ?? {};
+  const forcedToolName: string = toolInfo.name;
 
   const stagedCalls = (state.pending_ai_message.tool_calls ?? []).map((tc) => ({
     name: tc.name,
     args: tc.args,
   }));
-
-  // // ── Give the refiner full access to prior tool outputs for param extraction ─
-  // const [toolResultSummary, callHistory] = await Promise.all([
-  //   buildToolResultSummary(state.messages, config),
-  //   Promise.resolve(buildCallHistory(state.messages)),
-  // ]);
-
-  // console.log("refineToolCall: tool info ->", toolInfo);
-  // console.log("refineToolCall: staged calls ->", stagedCalls);
-  // console.log(
-  //   "refineToolCall: tool results available for param extraction:\n",
-  //   toolResultSummary,
-  // );
 
   const prompt = ChatPromptTemplate.fromMessages([
     ["system", configuration.toolRefinerPrompt],
@@ -417,10 +431,15 @@ export async function refineToolCall(
   );
 
   const response = await model
-    .bindTools([state.current_tool as any])
+    .bindTools([state.current_tool as any], {
+      tool_choice: {
+        type: "function",
+        function: { name: forcedToolName },
+      },
+    })
     .invoke(messageValue, config);
 
-  console.log("refineToolCall -> refined call:", response);
+  console.error("refineToolCall -> refined call:", response);
 
   return {
     messages: [response],
@@ -472,11 +491,13 @@ export async function mcpToolCall(
         new mcp.RunTool(toolCall.name, toolCall.args),
       );
 
+      console.log("MCP tool call ->", output);
+
       messages.push(
         new ToolMessage(
           typeof output === "string" ? output : JSON.stringify(output),
           toolCall.id,
-          toolCall.name, // ← include name so buildToolResultSummary can label it
+          toolCall.name,
         ),
       );
     } catch (e) {
@@ -541,34 +562,39 @@ export async function extractConversation(
     return { conversation: null };
   }
 
-  const messages: ChatMessage[] = [];
+  let lastHuman: ChatMessage | null = null;
+  let lastAI: ChatMessage | null = null;
 
-  for (const msg of state.messages) {
-    if (msg instanceof AIMessage && msg.content) {
-      messages.push({
+  for (let i = state.messages.length - 1; i >= 0; i--) {
+    const msg = state.messages[i];
+
+    if (!lastAI && msg instanceof AIMessage && msg.content) {
+      lastAI = {
         label: "ai",
         content:
           typeof msg.content === "string"
             ? msg.content
             : JSON.stringify(msg.content),
         timestamp: new Date(),
-      });
-    } else if (msg instanceof HumanMessage && msg.content) {
-      messages.push({
+      };
+    } else if (!lastHuman && msg instanceof HumanMessage && msg.content) {
+      lastHuman = {
         label: "human",
         content: String(msg.content),
         timestamp: new Date(),
-      });
+      };
     }
+
+    if (lastHuman && lastAI) break;
   }
 
-  if (messages.length < 2) {
+  if (!lastHuman || !lastAI) {
     return { conversation: null };
   }
 
   return {
     conversation: {
-      messages: messages as unknown as [ChatMessage, ChatMessage],
+      messages: [lastHuman, lastAI] as unknown as [ChatMessage, ChatMessage],
     },
   };
 }

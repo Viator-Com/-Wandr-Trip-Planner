@@ -213,7 +213,7 @@ const STATUS_MESSAGES = [
 import type { UserProfile } from "../../api/types";
 
 const POLL_INTERVAL_MS = 3000;
-const TIMEOUT_MS = 120000;
+const TIMEOUT_MS = 300000;
 
 /* ═══════════════════════════════════════════════════════════════════
    CHAT PAGE

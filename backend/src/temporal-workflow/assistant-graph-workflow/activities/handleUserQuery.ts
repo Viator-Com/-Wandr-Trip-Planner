@@ -93,6 +93,7 @@ export async function runAssistantGraph(input: {
       configurable: {
         tripId: rawTripId,
       },
+      recursionLimit: 100,
     },
   );
 

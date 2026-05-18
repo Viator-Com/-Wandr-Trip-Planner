@@ -75,16 +75,11 @@ export class Configuration {
       },
       flights: {
         transport: "stdio",
-        command: "npx",
+        command: "node",
         args: [
-          "mcp-remote",
-          "https://mcp.rapidapi.com",
-          "--header",
-          "x-api-host: sky-scrapper.p.rapidapi.com",
-          "--header",
-          `x-api-key: ${process.env.RAPID_API}`,
+          "/Users/ravindrarinwa/Desktop/trip-planner/backend/build/mcp-servers/flights-mcp-server/server.js",
         ],
-        description: "Skyscanner flight search MCP server via RapidAPI",
+        description: "Flights MCP server",
       },
     },
   };
