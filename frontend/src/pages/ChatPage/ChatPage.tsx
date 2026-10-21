@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/SideBar/SideBar";
 import { sendQuery } from "../../api/sendQuery";
@@ -216,6 +216,34 @@ const POLL_INTERVAL_MS = 3000;
 const TIMEOUT_MS = 300000;
 
 /* ═══════════════════════════════════════════════════════════════════
+   CHAT MESSAGE ROW  (memoized — pins computed once per message,
+   stable reference so MapView's effect doesn't re-fire every second)
+═══════════════════════════════════════════════════════════════════ */
+const ChatMessageRow: React.FC<{ msg: Message }> = React.memo(({ msg }) => {
+  const pins = useMemo(
+    () => (msg.label === "ai" ? extractPins(msg.content) : []),
+    [msg.label, msg.content],
+  );
+
+  return (
+    <div className={`chat-row ${msg.label}`}>
+      {msg.label === "ai" && <div className="avatar ai-avatar">W</div>}
+      <div className={`chat-bubble ${msg.label}`}>
+        {msg.label === "ai" ? (
+          <>
+            <MarkdownMessage content={msg.content} />
+            {pins.length > 0 && <MapView pins={pins} />}
+          </>
+        ) : (
+          msg.content
+        )}
+      </div>
+    </div>
+  );
+});
+ChatMessageRow.displayName = "ChatMessageRow";
+
+/* ═══════════════════════════════════════════════════════════════════
    CHAT PAGE
 ═══════════════════════════════════════════════════════════════════ */
 interface TripForm {
@@ -301,10 +329,9 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     if (!loading) textareaRef.current?.focus();
   }, [loading]);
-  useEffect(
-    () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
-    [messages, loading],
-  );
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   useEffect(() => {
     if (loading) {
@@ -336,7 +363,11 @@ const ChatPage: React.FC = () => {
       .catch((err) => console.error("Failed to load messages:", err.message));
   }, [tripId]);
 
-  useEffect(() => () => stopPolling(), []);
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim() || !tripId || loading) return;
@@ -494,26 +525,9 @@ const ChatPage: React.FC = () => {
             </div>
           )}
 
-          {messages.map((msg, idx) => {
-            const pins = msg.label === "ai" ? extractPins(msg.content) : [];
-            return (
-              <div key={idx} className={`chat-row ${msg.label}`}>
-                {msg.label === "ai" && (
-                  <div className="avatar ai-avatar">W</div>
-                )}
-                <div className={`chat-bubble ${msg.label}`}>
-                  {msg.label === "ai" ? (
-                    <>
-                      <MarkdownMessage content={msg.content} />
-                      {pins.length > 0 && <MapView pins={pins} />}
-                    </>
-                  ) : (
-                    msg.content
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {messages.map((msg, idx) => (
+            <ChatMessageRow key={idx} msg={msg} />
+          ))}
 
           {loading && (
             <div className="chat-row ai">

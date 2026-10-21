@@ -1,27 +1,18 @@
-import {
-  assistantGraph,
-  buildRouterGraph,
-} from "../../../langgraph_mcp/index.js";
-import {
-  HumanMessage,
-  AIMessage,
-  BaseMessage,
-  SystemMessage,
-} from "@langchain/core/messages";
+import { graph as assistantGraph } from "../../../langgraph_mcp/graph.js";
+import type {
+  ChatMessage,
+  ChatRole,
+  Conversation,
+} from "../../../langgraph_mcp/graph.js";
+import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import mongoose from "mongoose";
 import { getChatByTripIdService } from "../../../services/getChatByTripIdService.js";
 import { appendConversationService } from "../../../services/appendConversationservice.js";
+// TODO: point this at whatever your db MCP server's `fetch-trip-from-database` tool called internally.
+import { getTripByIdService } from "../../../services/getTripByIdService.js";
 
-export type ChatRole = "ai" | "human";
-
-export interface ChatMessage {
-  label: ChatRole;
-  content: string;
-  timestamp?: Date;
-}
-export type Conversation = {
-  messages: [ChatMessage, ChatMessage]; // human, ai
-};
+// Re-exported so existing imports of these types from this file keep working.
+export type { ChatMessage, ChatRole, Conversation };
 
 export async function saveConversations(
   tripId: string,
@@ -46,6 +37,29 @@ export async function loadConversations(tripId: string, userId: string) {
   } catch (error: any) {
     console.error("FROM loadConversations activity:", error.message);
     throw error;
+  }
+}
+
+/**
+ * Loads the saved trip as plain JSON to push into the graph state.
+ * A missing or failing trip must never fail the user's question, so errors become null.
+ */
+export async function loadSavedTrip(
+  tripId: string,
+  userId: string,
+): Promise<Record<string, any> | null> {
+  try {
+    const trip: any = await getTripByIdService(tripId);
+    if (!trip) return null;
+    return typeof trip.toObject === "function"
+      ? trip.toObject()
+      : JSON.parse(JSON.stringify(trip));
+  } catch (error: any) {
+    console.error(
+      "[loadSavedTrip] failed (continuing without it):",
+      error?.message ?? error,
+    );
+    return null;
   }
 }
 
@@ -79,25 +93,41 @@ export async function runAssistantGraph(input: {
 }) {
   const { query, tripId, userId } = input;
   const rawTripId = tripId.replace("assistant-", "");
-  const conversations = await loadConversations(rawTripId, userId);
+  const [conversations, savedTrip] = await Promise.all([
+    loadConversations(rawTripId, userId),
+    loadSavedTrip(rawTripId, userId),
+  ]);
 
   const historyMessages = buildHistory(conversations);
 
-  // await buildRouterGraph.invoke({});
-
+  // Linear graph (planner -> executor -> composer -> finalizer), no cycles.
+  // Planner and composer only read the last 16 messages of history.
   const result = await assistantGraph.invoke(
     {
       messages: [...historyMessages, new HumanMessage(query)],
+      savedTrip,
     },
     {
-      configurable: {
-        tripId: rawTripId,
-      },
-      recursionLimit: 100,
+      recursionLimit: 25,
     },
   );
 
-  console.error(result.conversation);
-  if (result.conversation) saveConversations(rawTripId, result.conversation);
-  return result;
+  if (result.conversation) {
+    // Saving the chat must never fail the user's request.
+    try {
+      await saveConversations(rawTripId, result.conversation);
+    } catch (error: any) {
+      console.error(
+        "[runAssistantGraph] saveConversations failed:",
+        error?.message ?? error,
+      );
+    }
+  }
+
+  // Return only what callers need. The full graph state (LangChain message objects,
+  // raw findings) is large, not cleanly serialisable, and can exceed Temporal's payload limit.
+  return {
+    conversation: result.conversation ?? null,
+    reply: result.conversation?.messages?.[1]?.content ?? null,
+  };
 }

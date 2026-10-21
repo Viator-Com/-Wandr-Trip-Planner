@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config({
-  path: path.resolve(__dirname, "../../.env"),
+  path: path.resolve(__dirname, "../../../.env"),
 });
 
 import * as getTripActivity from "./activities/getTripById.js";
@@ -16,11 +16,19 @@ import * as weatherActivity from "./activities/fetchWeather.js";
 import * as sendAlertActivity from "./activities/sendWeatherAlert.js";
 
 async function run() {
+  console.log("Connecting to Temporal...");
+
   const connection = await NativeConnection.connect({
     address: "localhost:7233",
   });
 
-  await mongoose.connect(process.env.MONGO_URI!);
+  console.log("Connecting to MongoDB...");
+
+  await mongoose.connect(process.env.MONGO_URI!, {
+    family: 4,
+    serverSelectionTimeoutMS: 10000,
+  });
+
   console.log("MongoDB connected in worker");
 
   try {

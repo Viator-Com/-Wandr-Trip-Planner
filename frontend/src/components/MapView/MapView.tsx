@@ -19,6 +19,9 @@ const MapView: React.FC<MapViewProps> = ({ pins }) => {
 
   useEffect(() => {
     if (!mapContainerRef.current || pins.length === 0) return;
+
+    let cancelled = false;
+
     // Prevent double-init on re-renders
     if (mapRef.current) {
       mapRef.current.remove();
@@ -27,6 +30,9 @@ const MapView: React.FC<MapViewProps> = ({ pins }) => {
 
     // Dynamically import Leaflet so it's SSR-safe
     import("leaflet").then((L) => {
+      // Bail if this effect was already cleaned up before the import resolved
+      if (cancelled || !mapContainerRef.current) return;
+
       // Fix default marker icons (Leaflet webpack issue)
       delete (L.Icon.Default.prototype as any)._getIconUrl;
       L.Icon.Default.mergeOptions({
@@ -41,7 +47,7 @@ const MapView: React.FC<MapViewProps> = ({ pins }) => {
       const avgLat = pins.reduce((s, p) => s + p.lat, 0) / pins.length;
       const avgLng = pins.reduce((s, p) => s + p.lng, 0) / pins.length;
 
-      const map = L.map(mapContainerRef.current!, {
+      const map = L.map(mapContainerRef.current, {
         center: [avgLat, avgLng],
         zoom: 15,
         zoomControl: true,
@@ -94,6 +100,7 @@ const MapView: React.FC<MapViewProps> = ({ pins }) => {
     });
 
     return () => {
+      cancelled = true; // stop a stale, still-pending import().then() from touching a dead map
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;

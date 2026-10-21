@@ -472,28 +472,11 @@ export async function WeatherTrackingWorkflow(
  *   date = "2025-06-15", time = "09:30", tz = "Asia/Kolkata"
  *   → 2025-06-15T04:00:00.000Z  (09:30 IST = 04:00 UTC)
  */
-function toEpochMs(
-  dateStr: string | Date,
-  timeStr: string | undefined,
-  timezone: string,
-): number | null {
-  if (!timeStr) return null;
 
-  const match = timeStr.match(/^(\d{2}):(\d{2})$/);
-  if (!match) return null;
+// ─── Timezone helpers (locale-independent) ────────────────────────────────────
 
-  const [, hh, mm] = match;
-
-  // Get the YYYY-MM-DD in the trip's timezone (handles DST correctly)
-  const datePart = new Date(dateStr).toLocaleDateString("en-CA", {
-    timeZone: timezone,
-  });
-
-  // Probe a UTC instant and compare it to what the timezone formatter
-  // says the local time is — difference gives us the UTC offset
-  const probe = new Date(`${datePart}T${hh}:${mm}:00Z`);
-
-  const formatter = new Intl.DateTimeFormat("en-CA", {
+function tzFormatter(timezone: string): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     year: "numeric",
     month: "2-digit",
@@ -501,34 +484,80 @@ function toEpochMs(
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    hour12: false,
+    hourCycle: "h23", // avoids "24:00" issue
   });
+}
 
-  const parts = Object.fromEntries(
-    formatter.formatToParts(probe).map(({ type, value }) => [type, value]),
+/** Calendar date (y, m, d) of an instant as seen in `timezone`. */
+function datePartsInZone(
+  date: string | Date,
+  timezone: string,
+): { y: number; m: number; d: number } | null {
+  const instant = new Date(date);
+  if (Number.isNaN(instant.getTime())) return null;
+
+  const p = Object.fromEntries(
+    tzFormatter(timezone)
+      .formatToParts(instant)
+      .map(({ type, value }) => [type, value]),
   );
+  return { y: Number(p.year), m: Number(p.month), d: Number(p.day) };
+}
 
-  const utcProbe = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour),
-    Number(parts.minute),
-    Number(parts.second),
-  );
+/** Wall-clock time (y-m-d hh:mm in timezone) → UTC epoch ms. */
+function zonedToEpochMs(
+  y: number,
+  m: number,
+  d: number,
+  hh: number,
+  mm: number,
+  timezone: string,
+): number | null {
+  // Treat the wall-clock time as if it were UTC, then correct by the zone offset
+  const wallAsUtc = Date.UTC(y, m - 1, d, hh, mm, 0);
+  if (Number.isNaN(wallAsUtc)) return null;
 
-  const offsetMs = probe.getTime() - utcProbe;
+  const offsetAt = (utcMs: number) => {
+    const p = Object.fromEntries(
+      tzFormatter(timezone)
+        .formatToParts(new Date(utcMs))
+        .map(({ type, value }) => [type, value]),
+    );
+    const asUtc = Date.UTC(
+      Number(p.year),
+      Number(p.month) - 1,
+      Number(p.day),
+      Number(p.hour),
+      Number(p.minute),
+      Number(p.second),
+    );
+    return asUtc - utcMs; // zone offset at that instant
+  };
 
-  const localEpochMs = Date.UTC(
-    Number(datePart.slice(0, 4)),
-    Number(datePart.slice(5, 7)) - 1,
-    Number(datePart.slice(8, 10)),
-    Number(hh),
-    Number(mm),
-    0,
-  );
+  // Two passes handle DST transitions correctly
+  let utc = wallAsUtc - offsetAt(wallAsUtc);
+  utc = wallAsUtc - offsetAt(utc);
+  return utc;
+}
 
-  return localEpochMs + offsetMs;
+function toEpochMs(
+  dateStr: string | Date,
+  timeStr: string | undefined,
+  timezone: string,
+): number | null {
+  if (!timeStr) return null;
+
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+
+  const hh = Number(match[1]);
+  const mm = Number(match[2]);
+  if (hh > 23 || mm > 59) return null;
+
+  const dp = datePartsInZone(dateStr, timezone);
+  if (!dp) return null;
+
+  return zonedToEpochMs(dp.y, dp.m, dp.d, hh, mm, timezone);
 }
 
 /** Index of first day that has at least one un-elapsed activity. -1 if none. */

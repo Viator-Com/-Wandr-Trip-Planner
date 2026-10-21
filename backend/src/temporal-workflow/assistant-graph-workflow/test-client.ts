@@ -3,8 +3,8 @@ import { Connection, Client } from "@temporalio/client";
 import { AssistantGraphWorkflow } from "./workflow.js";
 
 async function main() {
-  const tripId = "6974a2d1800dce0d4c547cb1";
-  const queryText = "what is best place in india to visit this time ?";
+  const tripId = "6ac34c38e3a8411ad3f7de2b";
+  const queryText = "can you suggest some attraction place in jaipur";
 
   const connection = await Connection.connect({
     address: "localhost:7233",
@@ -12,7 +12,7 @@ async function main() {
 
   const client = new Client({ connection });
 
-  const workflowId = tripId;
+  const workflowId = "assistant-" + tripId;
 
   let handle;
   try {

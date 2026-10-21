@@ -32,7 +32,12 @@ app.use("/api/temporal", temporalRoutes);
 
 const startServer = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI!);
+    console.log(process.env.MONGO_URI);
+    // await mongoose.connect(process.env.MONGO_URI!);
+    await mongoose.connect(process.env.MONGO_URI!, {
+      family: 4,
+      serverSelectionTimeoutMS: 10000,
+    });
     console.log("MongoDB connected");
 
     const PORT = process.env.PORT || 3000;

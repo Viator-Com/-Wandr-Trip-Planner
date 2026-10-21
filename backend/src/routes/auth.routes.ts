@@ -18,7 +18,7 @@ router.post("/login", login);
 
 router.use(protect);
 
-router.get("/me", protect, getMe);
+router.get("/me", getMe);
 
 router.patch("/email", updateEmail);
 router.patch("/password", updatePassword);

@@ -2,352 +2,116 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import {
-  searchAirport,
-  searchFlights_Version_2,
-  searchFlightsMultiStops,
-  getNearByAirports,
-  getFlightDetails,
-  searchFlightEverywhere,
-  getPriceCalendar,
-  searchIncomplete,
-} from "./api.js";
+import { FlightToolError, getConnection } from "./kiwiclient.js";
+import { searchFlightsFlow } from "./flights.js";
 
-/* ─────────────────────────────────────────────────────────────────
-   MCP Server bootstrap
-───────────────────────────────────────────────────────────────── */
+const DEFAULT_CURRENCY = (process.env.DEFAULT_CURRENCY ?? "USD").toUpperCase();
 
-const server = new McpServer({
-  name: "flights",
-  version: "1.0.0",
-});
+const server = new McpServer({ name: "flights", version: "2.0.0" });
 
-/* ─────────────────────────────────────────────────────────────────
-   Helper — wrap every tool handler so errors become MCP error content
-   instead of crashing the server process.
-───────────────────────────────────────────────────────────────── */
-function wrap(
-  fn: (...args: any[]) => Promise<any>,
-): (
-  ...args: any[]
-) => Promise<{ content: Array<{ type: "text"; text: string }> }> {
-  return async (...args) => {
+/** Errors become MCP error content instead of crashing the process. */
+function wrap<A>(fn: (args: A) => Promise<unknown>) {
+  return async (args: A) => {
     try {
-      const result = await fn(...args);
       return {
-        content: [{ type: "text", text: JSON.stringify(result) }],
+        content: [
+          { type: "text" as const, text: JSON.stringify(await fn(args)) },
+        ],
       };
     } catch (err: any) {
-      const message = err?.response?.data
-        ? JSON.stringify(err.response.data)
-        : (err?.message ?? String(err));
+      const body =
+        err instanceof FlightToolError
+          ? { error: err.message, hint: err.hint }
+          : { error: err?.message ?? String(err) };
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: message }) }],
+        content: [{ type: "text" as const, text: JSON.stringify(body) }],
         isError: true,
       };
     }
   };
 }
 
-/* ─────────────────────────────────────────────────────────────────
-   1. searchAirport
-───────────────────────────────────────────────────────────────── */
 server.tool(
-  "searchAirport",
-  "Search for airports by city or airport name. Returns skyId and entityId required by all flight search tools. Always call this before any flight search.",
+  "search_flights",
+  "Search live flights between two cities or airports in ONE call (powered by Kiwi.com). " +
+    "Pass city names or IATA codes exactly as the user gave them; airports are resolved internally, " +
+    "so no airport lookup or follow-up call is ever needed. " +
+    "Returns the best, cheapest and fastest options with prices, times, stops, layovers and booking links. " +
+    "Supports one-way and round-trip, up to ±3 flexible days, and passenger mix. " +
+    "Do not call it again for the same route and date.",
   {
-    query: z
+    origin_city: z
       .string()
-      .describe("City or airport name to search, e.g. 'Jodhpur' or 'Delhi'"),
-    locale: z
+      .min(2)
+      .describe(
+        "Departure city or airport as the user wrote it, e.g. 'Jaipur', 'New Delhi' or 'DEL'.",
+      ),
+    destination_city: z
+      .string()
+      .min(2)
+      .describe(
+        "Arrival city or airport as the user wrote it, e.g. 'Mumbai' or 'BOM'.",
+      ),
+    date: z.string().describe("Departure date, absolute YYYY-MM-DD."),
+    return_date: z
       .string()
       .optional()
-      .default("en-US")
-      .describe("Locale for response text, default en-US"),
-  },
-  wrap(async ({ query, locale }) => searchAirport({ query, locale })),
-);
-
-/* ─────────────────────────────────────────────────────────────────
-   2. searchFlights_Version_2
-───────────────────────────────────────────────────────────────── */
-server.tool(
-  "searchFlights_Version_2",
-  "Search one-way or round-trip flights between two airports. Requires skyId and entityId for both origin and destination — obtain these from searchAirport first.",
-  {
-    originSkyId: z
-      .string()
-      .describe(
-        "IATA-style SkyId of origin airport, e.g. 'JDH'. Must come from searchAirport result.",
-      ),
-    destinationSkyId: z
-      .string()
-      .describe(
-        "IATA-style SkyId of destination airport, e.g. 'DEL'. Must come from searchAirport result.",
-      ),
-    originEntityId: z
-      .string()
-      .describe("entityId of origin airport returned by searchAirport."),
-    destinationEntityId: z
-      .string()
-      .describe("entityId of destination airport returned by searchAirport."),
-    date: z.string().describe("Departure date in YYYY-MM-DD format."),
-    returnDate: z
-      .string()
+      .describe("Return date YYYY-MM-DD. Omit for a one-way trip."),
+    flexible_days: z
+      .number()
+      .int()
+      .min(0)
+      .max(3)
       .optional()
-      .describe("Return date in YYYY-MM-DD format. Omit for one-way."),
-    cabinClass: z
+      .default(0)
+      .describe(
+        "Search ± this many days around the dates (0-3). Use only if the user is flexible.",
+      ),
+    adults: z.number().int().min(1).max(9).optional().default(1),
+    children: z.number().int().min(0).max(8).optional().default(0),
+    infants: z.number().int().min(0).max(4).optional().default(0),
+    cabin_class: z
       .enum(["economy", "premium_economy", "business", "first"])
       .optional()
-      .default("economy")
-      .describe("Cabin class."),
-    adults: z
-      .number()
-      .int()
-      .min(1)
-      .optional()
-      .default(1)
-      .describe("Number of adult passengers."),
-    childrens: z
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .default(0)
-      .describe("Number of child passengers."),
-    infants: z
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .default(0)
-      .describe("Number of infant passengers."),
-    sortBy: z
-      .enum([
-        "best",
-        "price_high",
-        "fastest",
-        "outbound_take_off_time",
-        "outbound_landing_time",
-        "return_take_off_time",
-        "return_landing_time",
-      ])
-      .optional()
-      .default("best")
-      .describe("Sort order for results."),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(50)
-      .optional()
-      .default(10)
-      .describe("Max number of results to return."),
-    carriersIds: z
-      .string()
-      .optional()
-      .describe("Comma-separated carrier IDs to filter by."),
+      .default("economy"),
     currency: z
       .string()
-      .optional()
-      .default("USD")
-      .describe("Currency code for prices, e.g. USD, INR."),
-    market: z.string().optional().default("en-US").describe("Market locale."),
-    countryCode: z
-      .string()
-      .optional()
-      .default("US")
-      .describe("Two-letter country code."),
-  },
-  wrap(async (params) => searchFlights_Version_2(params)),
-);
-
-/* ─────────────────────────────────────────────────────────────────
-   3. searchFlightsMultiStops
-───────────────────────────────────────────────────────────────── */
-server.tool(
-  "searchFlightsMultiStops",
-  "Search multi-city flights with 2 or more legs. Each leg needs its own origin/destination skyId and entityId from searchAirport.",
-  {
-    legs: z
-      .array(
-        z.object({
-          originSkyId: z.string().describe("SkyId of leg origin."),
-          destinationSkyId: z.string().describe("SkyId of leg destination."),
-          originEntityId: z.string().describe("entityId of leg origin."),
-          destinationEntityId: z
-            .string()
-            .describe("entityId of leg destination."),
-          date: z
-            .string()
-            .describe("Departure date for this leg in YYYY-MM-DD."),
-        }),
-      )
-      .min(2)
-      .describe("Array of flight legs — minimum 2."),
-    cabinClass: z
-      .enum(["economy", "premium_economy", "business", "first"])
-      .optional()
-      .default("economy"),
-    adults: z.number().int().min(1).optional().default(1),
-    childrens: z.number().int().min(0).optional().default(0),
-    infants: z.number().int().min(0).optional().default(0),
-    currency: z.string().optional().default("USD"),
-    market: z.string().optional().default("en-US"),
-    countryCode: z.string().optional().default("US"),
-  },
-  wrap(async (params) => searchFlightsMultiStops(params)),
-);
-
-/* ─────────────────────────────────────────────────────────────────
-   4. getNearByAirports
-───────────────────────────────────────────────────────────────── */
-server.tool(
-  "getNearByAirports",
-  "Find airports nearest to a GPS coordinate. Useful when the user mentions a location without specifying an airport.",
-  {
-    lat: z.number().describe("Latitude of the location."),
-    lng: z.number().describe("Longitude of the location."),
-    locale: z
-      .string()
-      .optional()
-      .default("en-US")
-      .describe("Locale for response text."),
-  },
-  wrap(async ({ lat, lng, locale }) => getNearByAirports({ lat, lng, locale })),
-);
-
-/* ─────────────────────────────────────────────────────────────────
-   5. getFlightDetails
-───────────────────────────────────────────────────────────────── */
-server.tool(
-  "getFlightDetails",
-  "Fetch full pricing breakdown, baggage policy, seat availability and booking deep-link for a specific itinerary. Requires itineraryId and sessionId from a prior searchFlights_Version_2 result.",
-  {
-    itineraryId: z
-      .string()
-      .describe("itineraryId from a searchFlights_Version_2 result."),
-    legs: z
-      .array(
-        z.object({
-          originPlaceId: z
-            .string()
-            .describe("Place ID of leg origin from search result."),
-          destinationPlaceId: z
-            .string()
-            .describe("Place ID of leg destination from search result."),
-          date: z.string().describe("Date of leg in YYYY-MM-DD."),
-        }),
-      )
-      .describe("Legs matching the selected itinerary."),
-    sessionId: z
-      .string()
-      .describe("sessionId returned by searchFlights_Version_2."),
-    adults: z.number().int().optional().default(1),
-    cabinClass: z.string().optional().default("economy"),
-    currency: z.string().optional().default("USD"),
-    market: z.string().optional().default("en-US"),
-    countryCode: z.string().optional().default("US"),
-  },
-  wrap(async (params) => getFlightDetails(params)),
-);
-
-/* ─────────────────────────────────────────────────────────────────
-   6. searchFlightEverywhere
-───────────────────────────────────────────────────────────────── */
-server.tool(
-  "searchFlightEverywhere",
-  "Discover the cheapest destinations reachable from an origin airport — no specific destination needed. Great for 'where can I fly cheaply from X?' queries.",
-  {
-    originSkyId: z
-      .string()
-      .describe("SkyId of the departure airport from searchAirport."),
-    originEntityId: z
-      .string()
-      .describe("entityId of the departure airport from searchAirport."),
-    cabinClass: z
-      .enum(["economy", "premium_economy", "business", "first"])
-      .optional()
-      .default("economy"),
-    adults: z.number().int().min(1).optional().default(1),
-    currency: z.string().optional().default("USD"),
-    market: z.string().optional().default("en-US"),
-    countryCode: z.string().optional().default("US"),
-  },
-  wrap(async (params) => searchFlightEverywhere(params)),
-);
-
-/* ─────────────────────────────────────────────────────────────────
-   7. getPriceCalendar
-───────────────────────────────────────────────────────────────── */
-server.tool(
-  "getPriceCalendar",
-  "Show cheapest available fares day-by-day across a date range between two airports. Useful for 'cheapest day to fly' or flexible-date queries.",
-  {
-    originSkyId: z
-      .string()
-      .describe("SkyId of origin airport from searchAirport."),
-    destinationSkyId: z
-      .string()
-      .describe("SkyId of destination airport from searchAirport."),
-    fromDate: z.string().describe("Start of date range in YYYY-MM-DD."),
-    toDate: z
-      .string()
+      .length(3)
       .optional()
       .describe(
-        "End of date range in YYYY-MM-DD. Defaults to one month from fromDate.",
+        `3-letter currency code for prices (default ${DEFAULT_CURRENCY}), e.g. INR.`,
       ),
-    cabinClass: z
-      .enum(["economy", "premium_economy", "business", "first"])
-      .optional()
-      .default("economy"),
-    currency: z.string().optional().default("USD"),
-    market: z.string().optional().default("en-US"),
-    countryCode: z.string().optional().default("US"),
   },
-  wrap(async (params) => getPriceCalendar(params)),
+  wrap(async (a) =>
+    searchFlightsFlow({
+      origin: a.origin_city,
+      destination: a.destination_city,
+      date: a.date,
+      returnDate: a.return_date,
+      flexibleDays: a.flexible_days,
+      adults: a.adults,
+      children: a.children,
+      infants: a.infants,
+      cabinClass: a.cabin_class,
+      currency: (a.currency ?? DEFAULT_CURRENCY).toUpperCase(),
+    }),
+  ),
 );
 
-/* ─────────────────────────────────────────────────────────────────
-   8. searchIncomplete
-───────────────────────────────────────────────────────────────── */
-server.tool(
-  "searchIncomplete",
-  "Continue or paginate a flight search that returned status:incomplete. Pass the sessionId from the original searchFlights_Version_2 response to fetch remaining results.",
-  {
-    sessionId: z
-      .string()
-      .describe(
-        "sessionId from a prior searchFlights_Version_2 response where status:incomplete.",
-      ),
-    sortBy: z
-      .string()
-      .optional()
-      .default("best")
-      .describe("Sort order for continued results."),
-    limit: z
-      .number()
-      .int()
-      .optional()
-      .default(10)
-      .describe("Number of additional results to fetch."),
-    currency: z.string().optional().default("USD"),
-    market: z.string().optional().default("en-US"),
-    countryCode: z.string().optional().default("US"),
-  },
-  wrap(async (params) => searchIncomplete(params)),
-);
-
-/* ─────────────────────────────────────────────────────────────────
-   Start server over stdio (used by mcp-remote / LangGraph MCP client)
-───────────────────────────────────────────────────────────────── */
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("flights-mcp-server: running on stdio");
+  await server.connect(new StdioServerTransport());
+  console.error("flights-mcp-server (kiwi): running on stdio");
+
+  // Warm up and validate Kiwi's schema now so problems show at startup, not mid-chat.
+  getConnection().catch((e) =>
+    console.error(
+      "flights-mcp-server (kiwi): startup check failed:",
+      e?.message ?? e,
+    ),
+  );
 }
 
 main().catch((err) => {
-  console.error("flights-mcp-server: fatal error", err);
+  console.error("flights-mcp-server (kiwi): fatal error", err);
   process.exit(1);
 });

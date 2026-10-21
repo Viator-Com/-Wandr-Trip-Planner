@@ -153,7 +153,7 @@ const SignupPage: React.FC = () => {
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           {/* Name */}
           <div className="auth-field">
-            <label className="auth-label">Full Name</label>
+            <label className="auth-label">User Name</label>
             <div
               className={`auth-input-wrap ${errors.username ? "auth-error" : ""}`}
             >

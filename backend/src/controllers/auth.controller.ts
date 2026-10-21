@@ -37,12 +37,48 @@ export const signup = async (req: Request, res: Response) => {
     }
 
     const hashed = await bcrypt.hash(password, 10);
-    await User.create({ username, email, password: hashed });
+    const user = await User.create({ username, email, password: hashed });
 
-    res.status(201).json({ message: "Account created successfully" });
-  } catch (err) {
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET!, {
+      expiresIn: "7d",
+    });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.status(201).json({
+      message: "Account created successfully",
+      token,
+      id: user._id,
+      username: user.username,
+      email: user.email,
+    });
+  } catch (err: any) {
     console.error("[signup]", err);
-    sendError(res, 500, "Something went wrong while creating your account");
+
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern)[0];
+
+      if (field === "username") {
+        return sendError(res, 409, "This username is already taken");
+      }
+
+      if (field === "email") {
+        return sendError(res, 409, "An account with this email already exists");
+      }
+
+      return sendError(res, 409, "A user with these details already exists");
+    }
+
+    return sendError(
+      res,
+      500,
+      "Something went wrong while creating your account",
+    );
   }
 };
 

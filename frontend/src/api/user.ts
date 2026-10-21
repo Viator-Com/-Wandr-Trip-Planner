@@ -24,7 +24,7 @@ function badge(trips: unknown[]): string {
 
 export async function fetchProfile(): Promise<ApiResponse<UserProfile>> {
   try {
-    const res = await axios.get(`${API}/auth/Me`, cfg);
+    const res = await axios.get(`${API}/auth/me`, cfg);
     console.log("RES ->", res);
     const u = res.data;
     return {
